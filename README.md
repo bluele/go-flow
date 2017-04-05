@@ -50,7 +50,16 @@ $ go run examples/channel.go
 2017/03/30 10:45:59 9
 ```
 
-# Author
+## Q&A
+
+* Can I disable debug log output?
+
+  You could disable log output to set your logger to `flow.Logger`.
+  ```go
+  flow.Logger = log.New(ioutil.Discard, "", log.LstdFlags)
+  ```
+
+## Author
 
 **Jun Kimura**
 

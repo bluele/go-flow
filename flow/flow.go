@@ -1,6 +1,9 @@
 package flow
 
-import "sync"
+import (
+	"sync"
+	"time"
+)
 
 // Run resolves the dependency of the specified task and starts it
 func Run(tk Task) {
@@ -27,7 +30,9 @@ func run(wg *sync.WaitGroup, tks []Task) {
 				Logger.Printf("task '%v' is ready?\n", tk.Name())
 				<-tk.ready()
 				Logger.Printf("task '%v' is started\n", tk.Name())
+				started := time.Now()
 				tk.run()
+				Logger.Printf("task '%v' is finished. Elapsed time is %v\n", tk.Name(), time.Since(started).String())
 			}(tk)
 			run(wg, tk.Requires())
 		}
