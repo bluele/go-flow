@@ -15,7 +15,11 @@ type Task interface {
 	init() error
 	run() error
 	skip() error
+	isSkip() bool
+
+	setDone()
 	isDone() bool
+
 	// this channel returns a value when all inputs is ready
 	ready() chan struct{}
 	destroy()
@@ -39,7 +43,7 @@ type task struct {
 	workerNumber int
 	wg           sync.WaitGroup
 
-	once sync.Once
+	done bool
 }
 
 func (tk *task) init() error {
@@ -73,12 +77,12 @@ func (tk *task) destroy() {
 	}
 }
 
-func (tk *task) isDone() bool {
+func (tk *task) isSkip() bool {
 	if len(tk.outputs) == 0 {
 		return false
 	}
 	for _, out := range tk.outputs {
-		if !out.IsDone() {
+		if !out.IsSkip() {
 			return false
 		}
 	}
@@ -112,17 +116,22 @@ func (tk *task) skip() error {
 }
 
 func (tk *task) run() error {
-	var err error
-	tk.once.Do(func() {
-		if err = tk.init(); err != nil {
-			return
-		}
-		for _, out := range tk.outputs {
-			defer out.Close()
-		}
-		tk.wg.Wait()
-	})
-	return err
+	if err := tk.init(); err != nil {
+		return err
+	}
+	for _, out := range tk.outputs {
+		defer out.Close()
+	}
+	tk.wg.Wait()
+	return nil
+}
+
+func (tk *task) setDone() {
+	tk.done = true
+}
+
+func (tk *task) isDone() bool {
+	return tk.done
 }
 
 func (tk *task) Name() string {

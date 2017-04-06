@@ -10,7 +10,7 @@ import (
 func main() {
 	in := flow.NewTask(
 		"input",
-		flow.WithOutputs(flow.NewChannelOutput(make(chan interface{}, 1))),
+		flow.WithOutputs(flow.NewChannelOutput("channel", make(chan interface{}, 1))),
 		flow.WithProcessor(func(tk flow.Task) error {
 			for i := 0; i < 10; i++ {
 				tk.Out().Write(i)
@@ -30,5 +30,8 @@ func main() {
 		}),
 		flow.WithWorker(3),
 	)
-	flow.Run(out)
+	_, err := flow.Run(out)
+	if err != nil {
+		panic(err)
+	}
 }
