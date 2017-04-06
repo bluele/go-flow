@@ -9,7 +9,7 @@ go-flow is a Golang library that helps you to create a complex flow of batch job
 ```go
 in := flow.NewTask(
     "input",
-    flow.WithOutputs(flow.NewChannelOutput(make(chan interface{}, 1))),
+    flow.WithOutputs(flow.NewChannelOutput("channel", make(chan interface{}, 1))),
     flow.WithProcessor(func(tk flow.Task) error {
         for i := 0; i < 10; i++ {
             tk.Out().Write(i)
@@ -29,7 +29,11 @@ out := flow.NewTask(
     }),
     flow.WithWorker(3), // Number of goroutine to process tasks
 )
-flow.Run(out)
+res, err := flow.Run(out)
+if err != nil {
+    panic(err)
+}
+SaveFile("/path/to/graph.dot", res.Graph())
 ```
 
 ```bash
@@ -49,6 +53,26 @@ $ go run examples/channel.go
 2017/03/30 10:45:58 7
 2017/03/30 10:45:59 9
 ```
+
+Result.Graph() returns a graph string string which is written by dot language.
+
+```dot
+digraph flow {
+        input->output[ label="channel(*flow.ChannelOutput)" ];
+        input [ label="input\ntime:2.008218498s" ];
+        output [ label="output\ntime:4.01283593s" ];
+
+}
+```
+
+You can use Graphviz to can render a graph image using this string.
+
+```
+$ dot -Tpng graph.dot -o graph.png
+```
+
+![graph](https://cloud.githubusercontent.com/assets/1170428/24747744/4e02d8c6-1af8-11e7-8256-5b19e167a002.png)
+
 
 ## Q&A
 
