@@ -6,9 +6,11 @@ import (
 	"github.com/awalterschulze/gographviz"
 )
 
+var GraphName = "flow"
+
 // GetGraphString returns a graph string string which is written by dot language
 func GetGraphString(tk Task) string {
-	graph := newGraph(`digraph G {}`)
+	graph := newGraph(fmt.Sprintf(`digraph %v {}`, GraphName))
 	walk(newgraphEdgeCache(graph), newgraphNodeCache(graph), tk.(*task))
 	return graph.String()
 }
@@ -58,7 +60,7 @@ func (nc *nodeCache) Get(tk *task) (*graphNode, bool) {
 	}
 	node := &graphNode{task: tk}
 	nc.cc = append(nc.cc, node)
-	nc.graph.AddNode("G", tk.Name(), nil)
+	nc.graph.AddNode(GraphName, tk.Name(), nil)
 	return node, true
 }
 

@@ -25,7 +25,7 @@ type Result struct {
 func newResult() *Result {
 	return &Result{
 		wg:    new(sync.WaitGroup),
-		graph: newGraph(`digraph G {}`),
+		graph: newGraph(fmt.Sprintf(`digraph %v {}`, GraphName)),
 	}
 }
 
@@ -48,7 +48,7 @@ func run(rs *Result, child Task, ins []Input) {
 		}
 		tk.setDone()
 		if tk.isSkip() {
-			Logger.Printf("task '%v' is already done, skip this\n", tk.Name())
+			Logger.Printf("Task '%v' is already done, skip this\n", tk.Name())
 			tk.skip()
 			continue
 		}
@@ -58,18 +58,18 @@ func run(rs *Result, child Task, ins []Input) {
 			defer rs.wg.Done()
 			defer func(tk Task) {
 				if err := recover(); err != nil {
-					Logger.Printf("task '%v' got an error %v\n", tk.Name(), err)
+					Logger.Printf("Task '%v' got an error %v\n", tk.Name(), err)
 					tk.destroy()
 				}
 			}(tk)
-			Logger.Printf("task '%v' is ready?\n", tk.Name())
+			Logger.Printf("Task '%v' is ready?\n", tk.Name())
 			<-tk.ready()
-			Logger.Printf("task '%v' is started\n", tk.Name())
+			Logger.Printf("Task '%v' is started\n", tk.Name())
 			started := time.Now()
 			tk.run()
 			et := time.Since(started).String()
-			Logger.Printf("task '%v' is finished. Elapsed time is %v\n", tk.Name(), et)
-			rs.graph.AddNode("G", tk.Name(), map[string]string{
+			Logger.Printf("Task '%v' is finished. Elapsed time is %v\n", tk.Name(), et)
+			rs.graph.AddNode(GraphName, tk.Name(), map[string]string{
 				"label": fmt.Sprintf("%#v", fmt.Sprintf("%v\ntime:%v", tk.Name(), et)),
 			})
 		}(tk)
