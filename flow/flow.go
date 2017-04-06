@@ -1,41 +1,79 @@
 package flow
 
 import (
+	"fmt"
 	"sync"
 	"time"
+
+	"github.com/awalterschulze/gographviz"
 )
 
 // Run resolves the dependency of the specified task and starts it
-func Run(tk Task) {
-	wg := new(sync.WaitGroup)
-	run(wg, []Task{tk})
-	wg.Wait()
+func Run(tk Task) (*Result, error) {
+	rs := newResult()
+	run(rs, nil, []Input{&taskOutput{tk: tk.(*task)}})
+	rs.wg.Wait()
+	return rs, nil
 }
 
-func run(wg *sync.WaitGroup, tks []Task) {
-	for _, tk := range tks {
+type Result struct {
+	wg    *sync.WaitGroup
+	mu    sync.Mutex
+	graph *gographviz.Graph
+}
+
+func newResult() *Result {
+	return &Result{
+		wg:    new(sync.WaitGroup),
+		graph: newGraph(`digraph G {}`),
+	}
+}
+
+// Graph returns graph string
+func (rs *Result) Graph() string {
+	return rs.graph.String()
+}
+
+func run(rs *Result, child Task, ins []Input) {
+	for _, in := range ins {
+		tk := in.(*taskOutput).tk
+		if child != nil {
+			out := in.(*taskOutput).Output
+			rs.graph.AddEdge(tk.Name(), child.Name(), true, map[string]string{
+				"label": fmt.Sprintf("%#v", out.String()),
+			})
+		}
 		if tk.isDone() {
+			continue
+		}
+		tk.setDone()
+		if tk.isSkip() {
 			Logger.Printf("task '%v' is already done, skip this\n", tk.Name())
 			tk.skip()
-		} else {
-			wg.Add(1)
-			go func(tk Task) {
-				defer wg.Done()
-				defer func(tk Task) {
-					if err := recover(); err != nil {
-						Logger.Printf("task '%v' got an error %v\n", tk.Name(), err)
-						tk.destroy()
-					}
-				}(tk)
-				Logger.Printf("task '%v' is ready?\n", tk.Name())
-				<-tk.ready()
-				Logger.Printf("task '%v' is started\n", tk.Name())
-				started := time.Now()
-				tk.run()
-				Logger.Printf("task '%v' is finished. Elapsed time is %v\n", tk.Name(), time.Since(started).String())
-			}(tk)
-			run(wg, tk.Requires())
+			continue
 		}
+
+		rs.wg.Add(1)
+		go func(tk Task) {
+			defer rs.wg.Done()
+			defer func(tk Task) {
+				if err := recover(); err != nil {
+					Logger.Printf("task '%v' got an error %v\n", tk.Name(), err)
+					tk.destroy()
+				}
+			}(tk)
+			Logger.Printf("task '%v' is ready?\n", tk.Name())
+			<-tk.ready()
+			Logger.Printf("task '%v' is started\n", tk.Name())
+			started := time.Now()
+			tk.run()
+			et := time.Since(started).String()
+			Logger.Printf("task '%v' is finished. Elapsed time is %v\n", tk.Name(), et)
+			rs.graph.AddNode("G", tk.Name(), map[string]string{
+				"label": fmt.Sprintf("%#v", fmt.Sprintf("%v\ntime:%v", tk.Name(), et)),
+			})
+		}(tk)
+		run(rs, tk, tk.inputs)
 	}
 	return
 }

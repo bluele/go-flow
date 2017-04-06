@@ -8,11 +8,16 @@ import (
 
 // GetGraphString returns a graph string string which is written by dot language
 func GetGraphString(tk Task) string {
-	graphAst, _ := gographviz.ParseString(`digraph G {}`)
-	graph := gographviz.NewGraph()
-	gographviz.Analyse(graphAst, graph)
+	graph := newGraph(`digraph G {}`)
 	walk(newgraphEdgeCache(graph), newgraphNodeCache(graph), tk.(*task))
 	return graph.String()
+}
+
+func newGraph(buf string) *gographviz.Graph {
+	graphAst, _ := gographviz.ParseString(buf)
+	graph := gographviz.NewGraph()
+	gographviz.Analyse(graphAst, graph)
+	return graph
 }
 
 type graphNode struct {
@@ -24,7 +29,7 @@ func (node *graphNode) Equal(other *graphNode) bool {
 	return node.task == other.task
 }
 
-func (node *graphNode) AddgraphEdge(edge *graphEdge) {
+func (node *graphNode) AddEdge(edge *graphEdge) {
 	for _, e := range node.graphEdges {
 		if edge.Equal(e) {
 			return
@@ -91,7 +96,7 @@ func (ec *edgeCache) Get(cnode, pnode *graphNode, out Output) (*graphEdge, bool)
 		}
 	}
 	ec.graph.AddEdge(pnode.Name(), cnode.Name(), true, map[string]string{
-		"label": fmt.Sprintf(`"%T"`, out),
+		"label": fmt.Sprintf("%#v", out.String()),
 	})
 	ec.cc = append(ec.cc, edge)
 	return edge, true
@@ -105,9 +110,9 @@ func walk(ec *edgeCache, nc *nodeCache, tk *task) {
 		pnode, _ := nc.Get(parent)
 		edge, ok := ec.Get(node, pnode, pout)
 		if !ok {
-			panic(fmt.Errorf("dupliacte reference: %v(%T) => %v", pnode.Name(), pout, node.Name()))
+			panic(fmt.Errorf("dupliacte reference: %v(%v) => %v", pnode.Name(), pout.String(), node.Name()))
 		}
-		node.AddgraphEdge(edge)
+		node.AddEdge(edge)
 		walk(ec, nc, parent)
 	}
 }

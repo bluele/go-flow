@@ -1,5 +1,7 @@
 package flow
 
+import "fmt"
+
 type Output interface {
 	Write(interface{}) error
 
@@ -8,8 +10,10 @@ type Output interface {
 
 	Channel() chan interface{}
 	Read() (interface{}, error)
-	IsDone() bool
+	IsSkip() bool
 	Ready() chan struct{}
+
+	String() string
 }
 
 type taskOutput struct {
@@ -18,12 +22,14 @@ type taskOutput struct {
 }
 
 type ChannelOutput struct {
-	ch chan interface{}
+	ch   chan interface{}
+	name string
 }
 
-func NewChannelOutput(ch chan interface{}) *ChannelOutput {
+func NewChannelOutput(name string, ch chan interface{}) *ChannelOutput {
 	return &ChannelOutput{
-		ch: ch,
+		ch:   ch,
+		name: name,
 	}
 }
 
@@ -47,7 +53,7 @@ func (co *ChannelOutput) Close() error {
 
 func (co *ChannelOutput) Destroy() {}
 
-func (co *ChannelOutput) IsDone() bool {
+func (co *ChannelOutput) IsSkip() bool {
 	return false
 }
 
@@ -55,4 +61,8 @@ func (co *ChannelOutput) Ready() chan struct{} {
 	ch := make(chan struct{})
 	close(ch)
 	return ch
+}
+
+func (co *ChannelOutput) String() string {
+	return fmt.Sprintf("%v(%T)", co.name, co)
 }

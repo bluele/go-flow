@@ -2,6 +2,7 @@ package flow
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"sync"
@@ -13,7 +14,7 @@ type FileStreaming struct {
 	w           *os.File
 	t           *tail
 	buf         chan interface{}
-	isDone      bool
+	isSkip      bool
 	serialize   SerializeFunc
 	deserialize DeserializeFunc
 	mu          sync.RWMutex
@@ -29,8 +30,8 @@ func NewFileStreaming(path string, serialize SerializeFunc, deserialize Deserial
 		w   *os.File
 		err error
 	)
-	isDone := IsFileExists(path)
-	if !isDone {
+	isSkip := IsFileExists(path)
+	if !isSkip {
 		if w, err = os.Create(path); err != nil {
 			return nil, err
 		}
@@ -47,12 +48,12 @@ func NewFileStreaming(path string, serialize SerializeFunc, deserialize Deserial
 		t:           t,
 		serialize:   serialize,
 		deserialize: deserialize,
-		isDone:      isDone,
+		isSkip:      isSkip,
 	}, nil
 }
 
 func (fs *FileStreaming) Write(v interface{}) error {
-	if fs.isDone {
+	if fs.isSkip {
 		return errors.New("cannot write to closed stream")
 	}
 	b, err := fs.serialize(v)
@@ -121,8 +122,8 @@ func (fs *FileStreaming) Destroy() {
 	os.Remove(fs.path)
 }
 
-func (fs *FileStreaming) IsDone() bool {
-	return fs.isDone
+func (fs *FileStreaming) IsSkip() bool {
+	return fs.isSkip
 }
 
 func (fs *FileStreaming) Ready() chan struct{} {
@@ -131,13 +132,17 @@ func (fs *FileStreaming) Ready() chan struct{} {
 	return ch
 }
 
+func (fs *FileStreaming) String() string {
+	return fmt.Sprintf("%v(%T)", fs.path, fs)
+}
+
 type FileBuffer struct {
 	path        string
 	w           *os.File      // writer
 	closed      chan struct{} // writer closed channel
 	t           *tail
 	buf         chan interface{} // reader channel
-	isDone      bool
+	isSkip      bool
 	serialize   SerializeFunc
 	deserialize DeserializeFunc
 	mu          sync.RWMutex
@@ -148,8 +153,8 @@ func NewFileBuffer(path string, serialize SerializeFunc, deserialize Deserialize
 		w   *os.File
 		err error
 	)
-	isDone := IsFileExists(path)
-	if !isDone {
+	isSkip := IsFileExists(path)
+	if !isSkip {
 		if w, err = os.Create(path); err != nil {
 			return nil, err
 		}
@@ -166,13 +171,13 @@ func NewFileBuffer(path string, serialize SerializeFunc, deserialize Deserialize
 		t:           t,
 		serialize:   serialize,
 		deserialize: deserialize,
-		isDone:      isDone,
+		isSkip:      isSkip,
 		closed:      make(chan struct{}),
 	}, nil
 }
 
 func (fb *FileBuffer) Write(v interface{}) error {
-	if fb.isDone {
+	if fb.isSkip {
 		return errors.New("cannot write to closed stream")
 	}
 	b, err := fb.serialize(v)
@@ -228,8 +233,8 @@ func (fb *FileBuffer) Channel() chan interface{} {
 	return buf
 }
 
-func (fb *FileBuffer) IsDone() bool {
-	return fb.isDone
+func (fb *FileBuffer) IsSkip() bool {
+	return fb.isSkip
 }
 
 func (fb *FileBuffer) Close() error {
@@ -248,4 +253,8 @@ func (fb *FileBuffer) Ready() chan struct{} {
 func (fb *FileBuffer) Destroy() {
 	fb.Close()
 	os.Remove(fb.path)
+}
+
+func (fb *FileBuffer) String() string {
+	return fmt.Sprintf("%v(%T)", fb.path, fb)
 }
