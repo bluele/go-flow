@@ -8,24 +8,51 @@ import (
 	"sync"
 )
 
-// streaming I/O
-type FileStreaming struct {
-	path        string
-	w           *os.File
-	t           *tail
-	buf         chan interface{}
-	isSkip      bool
-	serialize   SerializeFunc
-	deserialize DeserializeFunc
-	mu          sync.RWMutex
-}
+var (
+	ErrSerializeValue = errors.New("ErrSerializeValue")
+	DefaultSerializer = &Serializer{
+		Serialize:   defaultSerialize,
+		Deserialize: defaultDeserialize,
+	}
+)
 
 type (
 	SerializeFunc   func(interface{}) ([]byte, error)
 	DeserializeFunc func([]byte) (interface{}, error)
 )
 
-func NewFileStreaming(path string, serialize SerializeFunc, deserialize DeserializeFunc) (*FileStreaming, error) {
+type Serializer struct {
+	Serialize   SerializeFunc
+	Deserialize DeserializeFunc
+}
+
+func defaultSerialize(iv interface{}) ([]byte, error) {
+	switch v := iv.(type) {
+	case []byte:
+		return v, nil
+	case string:
+		return []byte(v), nil
+	default:
+		return nil, ErrSerializeValue
+	}
+}
+
+func defaultDeserialize(b []byte) (interface{}, error) {
+	return b, nil
+}
+
+// streaming I/O
+type FileStreaming struct {
+	path   string
+	w      *os.File
+	t      *tail
+	buf    chan interface{}
+	isSkip bool
+	srz    *Serializer
+	mu     sync.RWMutex
+}
+
+func NewFileStreaming(path string, srz *Serializer) (*FileStreaming, error) {
 	var (
 		w   *os.File
 		err error
@@ -42,13 +69,16 @@ func NewFileStreaming(path string, serialize SerializeFunc, deserialize Deserial
 	}
 	t := newTail(r)
 	go t.Run()
+
+	if srz == nil {
+		srz = DefaultSerializer
+	}
 	return &FileStreaming{
-		path:        path,
-		w:           w,
-		t:           t,
-		serialize:   serialize,
-		deserialize: deserialize,
-		isSkip:      isSkip,
+		path:   path,
+		w:      w,
+		t:      t,
+		srz:    srz,
+		isSkip: isSkip,
 	}, nil
 }
 
@@ -56,13 +86,13 @@ func (fs *FileStreaming) Write(v interface{}) error {
 	if fs.isSkip {
 		return errors.New("cannot write to closed stream")
 	}
-	b, err := fs.serialize(v)
+	b, err := fs.srz.Serialize(v)
 	if err != nil {
 		return err
 	}
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
-	_, err = fs.w.Write(b)
+	_, err = fs.w.Write(append(b, '\n'))
 	return err
 }
 
@@ -77,7 +107,7 @@ func (fs *FileStreaming) Read() (interface{}, error) {
 		}
 		return nil, line.Error
 	}
-	return fs.deserialize([]byte(line.Text))
+	return fs.srz.Deserialize([]byte(line.Text))
 }
 
 func (fs *FileStreaming) Channel() chan interface{} {
@@ -97,7 +127,7 @@ func (fs *FileStreaming) Channel() chan interface{} {
 				Logger.Printf("file %v, occurred err: %v\n", fs.path, line.Error)
 				continue
 			}
-			if b, err := fs.deserialize(line.Text); err != nil {
+			if b, err := fs.srz.Deserialize(line.Text); err != nil {
 				Logger.Printf("file: %v, deserialize error: %v\n", fs.path, err)
 				return
 			} else {
@@ -137,18 +167,17 @@ func (fs *FileStreaming) String() string {
 }
 
 type FileBuffer struct {
-	path        string
-	w           *os.File      // writer
-	closed      chan struct{} // writer closed channel
-	t           *tail
-	buf         chan interface{} // reader channel
-	isSkip      bool
-	serialize   SerializeFunc
-	deserialize DeserializeFunc
-	mu          sync.RWMutex
+	path   string
+	w      *os.File      // writer
+	closed chan struct{} // writer closed channel
+	t      *tail
+	buf    chan interface{} // reader channel
+	isSkip bool
+	srz    *Serializer
+	mu     sync.RWMutex
 }
 
-func NewFileBuffer(path string, serialize SerializeFunc, deserialize DeserializeFunc) (*FileBuffer, error) {
+func NewFileBuffer(path string, srz *Serializer) (*FileBuffer, error) {
 	var (
 		w   *os.File
 		err error
@@ -165,14 +194,16 @@ func NewFileBuffer(path string, serialize SerializeFunc, deserialize Deserialize
 	}
 	t := newTail(r)
 	go t.Run()
+	if srz == nil {
+		srz = DefaultSerializer
+	}
 	return &FileBuffer{
-		path:        path,
-		w:           w,
-		t:           t,
-		serialize:   serialize,
-		deserialize: deserialize,
-		isSkip:      isSkip,
-		closed:      make(chan struct{}),
+		path:   path,
+		w:      w,
+		t:      t,
+		srz:    srz,
+		isSkip: isSkip,
+		closed: make(chan struct{}),
 	}, nil
 }
 
@@ -180,7 +211,7 @@ func (fb *FileBuffer) Write(v interface{}) error {
 	if fb.isSkip {
 		return errors.New("cannot write to closed stream")
 	}
-	b, err := fb.serialize(v)
+	b, err := fb.srz.Serialize(v)
 	if err != nil {
 		return err
 	}
@@ -201,7 +232,7 @@ func (fb *FileBuffer) Read() (interface{}, error) {
 		}
 		return nil, line.Error
 	}
-	return fb.deserialize([]byte(line.Text))
+	return fb.srz.Deserialize([]byte(line.Text))
 }
 
 func (fb *FileBuffer) Channel() chan interface{} {
@@ -210,27 +241,26 @@ func (fb *FileBuffer) Channel() chan interface{} {
 	if fb.buf != nil {
 		return fb.buf
 	}
-	buf := make(chan interface{})
+	fb.buf = make(chan interface{})
 	go func() {
 		for line := range fb.t.Lines {
 			if line.Error == io.EOF {
 				Logger.Printf("closed %v\n", fb.path)
-				close(buf)
+				close(fb.buf)
 				return
 			} else if line.Error != nil {
 				Logger.Printf("file %v, occurred err: %v\n", fb.path, line.Error)
 				continue
 			}
-			if b, err := fb.deserialize(line.Text); err != nil {
+			if b, err := fb.srz.Deserialize(line.Text); err != nil {
 				Logger.Printf("file %v, deserialize error: %v\n", fb.path, err)
 				return
 			} else {
-				buf <- b
+				fb.buf <- b
 			}
 		}
 	}()
-	fb.buf = buf
-	return buf
+	return fb.buf
 }
 
 func (fb *FileBuffer) IsSkip() bool {

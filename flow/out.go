@@ -2,6 +2,7 @@ package flow
 
 import "fmt"
 
+// Output is output interface
 type Output interface {
 	Write(interface{}) error
 

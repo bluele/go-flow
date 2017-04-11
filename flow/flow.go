@@ -39,9 +39,13 @@ func run(rs *Result, child Task, ins []Input) {
 		tk := in.(*taskOutput).tk
 		if child != nil {
 			out := in.(*taskOutput).Output
-			rs.graph.AddEdge(tk.Name(), child.Name(), true, map[string]string{
-				"label": fmt.Sprintf("%#v", out.String()),
-			})
+			rs.graph.AddEdge(
+				escapeString(tk.Name()),
+				escapeString(child.Name()),
+				true,
+				map[string]string{
+					"label": escapeString(out.String()),
+				})
 		}
 		if tk.isDone() {
 			continue
@@ -50,6 +54,12 @@ func run(rs *Result, child Task, ins []Input) {
 		if tk.isSkip() {
 			Logger.Printf("Task '%v' is already done, skip this\n", tk.Name())
 			tk.skip()
+			rs.graph.AddNode(
+				GraphName,
+				escapeString(tk.Name()),
+				map[string]string{
+					"label": fmt.Sprintf("%#v", fmt.Sprintf("%v\n(skipped)", tk.Name())),
+				})
 			continue
 		}
 
@@ -69,9 +79,12 @@ func run(rs *Result, child Task, ins []Input) {
 			tk.run()
 			et := time.Since(started).String()
 			Logger.Printf("Task '%v' is finished. Elapsed time is %v\n", tk.Name(), et)
-			rs.graph.AddNode(GraphName, tk.Name(), map[string]string{
-				"label": fmt.Sprintf("%#v", fmt.Sprintf("%v\ntime:%v", tk.Name(), et)),
-			})
+			rs.graph.AddNode(
+				GraphName,
+				escapeString(tk.Name()),
+				map[string]string{
+					"label": fmt.Sprintf("%#v", fmt.Sprintf("%v\ntime:%v", tk.Name(), et)),
+				})
 		}(tk)
 		run(rs, tk, tk.inputs)
 	}

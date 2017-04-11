@@ -2,6 +2,7 @@ package flow
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -68,4 +69,30 @@ func IsFileExists(path string) bool {
 		return true
 	}
 	return false
+}
+
+func String(iv interface{}) string {
+	switch v := iv.(type) {
+	case string:
+		return v
+	case []byte:
+		return string(v)
+	default:
+		return fmt.Sprint(v)
+	}
+}
+
+func Bytes(iv interface{}) []byte {
+	switch v := iv.(type) {
+	case []byte:
+		return v
+	case string:
+		return []byte(v)
+	default:
+		return []byte(fmt.Sprint(v))
+	}
+}
+
+func escapeString(s string) string {
+	return fmt.Sprintf("%#v", s)
 }
