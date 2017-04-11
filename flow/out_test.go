@@ -1,35 +1,9 @@
 package flow
 
-import (
-	"fmt"
-	"testing"
-)
-
-func serialize(v interface{}) ([]byte, error) {
-	switch t := v.(type) {
-	case []byte:
-		return append(t, '\n'), nil
-	case string:
-		return []byte(t + "\n"), nil
-	}
-	return nil, fmt.Errorf("Unknown type: %T", v)
-}
-
-func deserialize(b []byte) (interface{}, error) {
-	if b[len(b)-1] == '\n' {
-		return string(b[:len(b)-1]), nil
-	}
-	return string(b), nil
-}
+import "testing"
 
 func TestFileStreaming(t *testing.T) {
-	defer func() {
-		if e := recover(); e != nil {
-			t.Fatal(e)
-		}
-	}()
-
-	st, err := NewFileStreaming("./flow_fst.txt", serialize, deserialize)
+	st, err := NewFileStreaming("/tmp/flow_fst.txt", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +18,7 @@ func TestFileStreaming(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if v.(string) != "test1" {
-		t.Errorf("%v != %v", v, "test1")
+	if s := String(v); s != "test1" {
+		t.Errorf("%v != %v", s, "test1")
 	}
 }
