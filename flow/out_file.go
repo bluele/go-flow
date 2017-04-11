@@ -166,7 +166,7 @@ func (fs *FileStreaming) String() string {
 	return fmt.Sprintf("%v(%T)", fs.path, fs)
 }
 
-type FileBuffer struct {
+type FileOutput struct {
 	path   string
 	w      *os.File      // writer
 	closed chan struct{} // writer closed channel
@@ -177,7 +177,7 @@ type FileBuffer struct {
 	mu     sync.RWMutex
 }
 
-func NewFileBuffer(path string, srz *Serializer) (*FileBuffer, error) {
+func NewFileOutput(path string, srz *Serializer) (*FileOutput, error) {
 	var (
 		w   *os.File
 		err error
@@ -197,7 +197,7 @@ func NewFileBuffer(path string, srz *Serializer) (*FileBuffer, error) {
 	if srz == nil {
 		srz = DefaultSerializer
 	}
-	return &FileBuffer{
+	return &FileOutput{
 		path:   path,
 		w:      w,
 		t:      t,
@@ -207,84 +207,84 @@ func NewFileBuffer(path string, srz *Serializer) (*FileBuffer, error) {
 	}, nil
 }
 
-func (fb *FileBuffer) Write(v interface{}) error {
-	if fb.isSkip {
+func (out *FileOutput) Write(v interface{}) error {
+	if out.isSkip {
 		return errors.New("cannot write to closed stream")
 	}
-	b, err := fb.srz.Serialize(v)
+	b, err := out.srz.Serialize(v)
 	if err != nil {
 		return err
 	}
-	fb.mu.Lock()
-	defer fb.mu.Unlock()
-	_, err = fb.w.Write(b)
+	out.mu.Lock()
+	defer out.mu.Unlock()
+	_, err = out.w.Write(b)
 	return err
 }
 
-func (fb *FileBuffer) Read() (interface{}, error) {
-	line := <-fb.t.Lines
+func (out *FileOutput) Read() (interface{}, error) {
+	line := <-out.t.Lines
 	if line == nil {
 		return nil, io.EOF
 	}
 	if line.Error != nil {
 		if line.Error == io.EOF {
-			close(fb.buf)
+			close(out.buf)
 		}
 		return nil, line.Error
 	}
-	return fb.srz.Deserialize([]byte(line.Text))
+	return out.srz.Deserialize([]byte(line.Text))
 }
 
-func (fb *FileBuffer) Channel() chan interface{} {
-	fb.mu.Lock()
-	defer fb.mu.Unlock()
-	if fb.buf != nil {
-		return fb.buf
+func (out *FileOutput) Channel() chan interface{} {
+	out.mu.Lock()
+	defer out.mu.Unlock()
+	if out.buf != nil {
+		return out.buf
 	}
-	fb.buf = make(chan interface{})
+	out.buf = make(chan interface{})
 	go func() {
-		for line := range fb.t.Lines {
+		for line := range out.t.Lines {
 			if line.Error == io.EOF {
-				Logger.Printf("closed %v\n", fb.path)
-				close(fb.buf)
+				Logger.Printf("closed %v\n", out.path)
+				close(out.buf)
 				return
 			} else if line.Error != nil {
-				Logger.Printf("file %v, occurred err: %v\n", fb.path, line.Error)
+				Logger.Printf("file %v, occurred err: %v\n", out.path, line.Error)
 				continue
 			}
-			if b, err := fb.srz.Deserialize(line.Text); err != nil {
-				Logger.Printf("file %v, deserialize error: %v\n", fb.path, err)
+			if b, err := out.srz.Deserialize(line.Text); err != nil {
+				Logger.Printf("file %v, deserialize error: %v\n", out.path, err)
 				return
 			} else {
-				fb.buf <- b
+				out.buf <- b
 			}
 		}
 	}()
-	return fb.buf
+	return out.buf
 }
 
-func (fb *FileBuffer) IsSkip() bool {
-	return fb.isSkip
+func (out *FileOutput) IsSkip() bool {
+	return out.isSkip
 }
 
-func (fb *FileBuffer) Close() error {
-	defer close(fb.closed)
-	defer fb.t.Stop()
-	if fb.w != nil {
-		return fb.w.Close()
+func (out *FileOutput) Close() error {
+	defer close(out.closed)
+	defer out.t.Stop()
+	if out.w != nil {
+		return out.w.Close()
 	}
 	return nil
 }
 
-func (fb *FileBuffer) Ready() chan struct{} {
-	return fb.closed
+func (out *FileOutput) Ready() chan struct{} {
+	return out.closed
 }
 
-func (fb *FileBuffer) Destroy() {
-	fb.Close()
-	os.Remove(fb.path)
+func (out *FileOutput) Destroy() {
+	out.Close()
+	os.Remove(out.path)
 }
 
-func (fb *FileBuffer) String() string {
-	return fmt.Sprintf("%v(%T)", fb.path, fb)
+func (out *FileOutput) String() string {
+	return fmt.Sprintf("%v(%T)", out.path, out)
 }
