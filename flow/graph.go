@@ -107,8 +107,8 @@ func (ec *edgeCache) Get(cnode, pnode *graphNode, out Output) (*graphEdge, bool)
 func walk(ec *edgeCache, nc *nodeCache, tk *task) {
 	node, _ := nc.Get(tk)
 	for _, in := range tk.inputs {
-		parent := in.(*taskOutput).tk
-		pout := in.(*taskOutput).Output
+		parent := in.(*taskInput).tk
+		pout := in.(*taskInput).Output
 		pnode, _ := nc.Get(parent)
 		edge, ok := ec.Get(node, pnode, pout)
 		if !ok {

@@ -25,12 +25,6 @@ type Task interface {
 	destroy()
 }
 
-type Input interface {
-	Channel() chan interface{}
-	Ready() chan struct{}
-	Read() (interface{}, error)
-}
-
 type task struct {
 	name string
 
@@ -198,24 +192,25 @@ func NewTask(name string, opts ...Options) Task {
 		workerNumber: op.WorkerNumber,
 	}
 	for _, out := range op.Outputs {
-		tk.outputs = append(tk.outputs, &taskOutput{
+		tk.outputs = append(tk.outputs, &taskInput{
 			tk:     tk,
 			Output: out,
 		})
 	}
 	var requires []Task
 	for _, in := range op.Inputs {
-		t := in.(*taskOutput).tk
-		// TODO use a better logic
-		found := false
-		for _, req := range requires {
-			if req.Name() == t.Name() {
-				found = true
-				break
+		for _, t := range in.(TaskInput).Tasks() {
+			// TODO use a better logic
+			found := false
+			for _, req := range requires {
+				if req.Name() == t.Name() {
+					found = true
+					break
+				}
 			}
-		}
-		if !found {
-			requires = append(requires, t)
+			if !found {
+				requires = append(requires, t)
+			}
 		}
 	}
 	tk.requires = requires
