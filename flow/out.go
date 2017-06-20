@@ -17,9 +17,18 @@ type Output interface {
 	String() string
 }
 
-type taskOutput struct {
+type TaskInput interface {
+	Tasks() []*task
+	Output
+}
+
+type taskInput struct {
 	tk *task
 	Output
+}
+
+func (to *taskInput) Tasks() []*task {
+	return []*task{to.tk}
 }
 
 type ChannelOutput struct {
