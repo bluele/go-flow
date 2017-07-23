@@ -84,10 +84,7 @@ func (rs *Result) Graph() string {
 
 func (fl *Flow) run(rs *Result, child Task, ins []Input) {
 	for _, in := range ins {
-		// ここでinをhookすれば全体の流量がわかる
-		if in.(*taskInput).Output != nil {
-			fl.buffers = append(fl.buffers, in)
-		}
+		fl.buffers = append(fl.buffers, resolveDependentInputs(in)...)
 		for _, tk := range in.(TaskInput).Tasks() {
 			if child != nil {
 				rs.graph.AddEdge(

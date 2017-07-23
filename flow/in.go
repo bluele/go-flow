@@ -70,7 +70,8 @@ func CombineInputs(ins ...Input) Input {
 		}
 	}()
 	return &combinedTaskInput{
-		tks: tasks,
+		tks:    tasks,
+		inputs: ins,
 		Output: &ChannelOutput{
 			ch:   ch,
 			name: "combined-inputs",
@@ -79,10 +80,26 @@ func CombineInputs(ins ...Input) Input {
 }
 
 type combinedTaskInput struct {
-	tks []*task
+	tks    []*task
+	inputs []Input
 	Output
 }
 
 func (to *combinedTaskInput) Tasks() []*task {
 	return to.tks
+}
+
+func resolveDependentInputs(in Input) []Input {
+	ins := []Input{}
+	switch input := in.(type) {
+	case *taskInput:
+		if input.Output != nil {
+			ins = append(ins, input)
+		}
+	case *combinedTaskInput:
+		for _, in := range input.inputs {
+			ins = append(ins, resolveDependentInputs(in)...)
+		}
+	}
+	return ins
 }
