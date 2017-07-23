@@ -1,19 +1,67 @@
 package flow
 
 import (
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"sync"
 	"time"
 
 	"github.com/awalterschulze/gographviz"
 )
 
-// Run resolves the dependency of the specified task and starts it
-func Run(tk Task) (*Result, error) {
+type Flow struct {
+	entry   Task
+	buffers []Input
+}
+
+type Stats struct {
+	Metrics []*Metric
+}
+
+type Metric struct {
+	Name       string
+	Time       time.Time
+	BufferSize int
+}
+
+func (fl *Flow) Stats() *Stats {
+	stats := new(Stats)
+	for _, in := range fl.buffers {
+		now := time.Now()
+		m := &Metric{
+			Name:       in.String(),
+			Time:       now,
+			BufferSize: len(in.Channel()),
+		}
+		stats.Metrics = append(stats.Metrics, m)
+	}
+	return stats
+}
+
+func (fl *Flow) StatsHandler(w http.ResponseWriter, r *http.Request) {
+	j, err := json.Marshal(fl.Stats())
+	if err == nil {
+		fmt.Fprint(w, string(j))
+	} else {
+		panic(err)
+	}
+}
+
+func (fl *Flow) Run() (*Result, error) {
 	rs := newResult()
-	run(rs, nil, []Input{&taskInput{tk: tk.(*task)}})
+	fl.run(rs, nil, []Input{&taskInput{tk: fl.entry.(*task)}})
 	rs.wg.Wait()
 	return rs, nil
+}
+
+func New(tk Task) *Flow {
+	return &Flow{entry: tk}
+}
+
+// Run resolves the dependency of the specified task and starts it
+func Run(tk Task) (*Result, error) {
+	return New(tk).Run()
 }
 
 type Result struct {
@@ -34,8 +82,12 @@ func (rs *Result) Graph() string {
 	return rs.graph.String()
 }
 
-func run(rs *Result, child Task, ins []Input) {
+func (fl *Flow) run(rs *Result, child Task, ins []Input) {
 	for _, in := range ins {
+		// ここでinをhookすれば全体の流量がわかる
+		if in.(*taskInput).Output != nil {
+			fl.buffers = append(fl.buffers, in)
+		}
 		for _, tk := range in.(TaskInput).Tasks() {
 			if child != nil {
 				rs.graph.AddEdge(
@@ -85,7 +137,7 @@ func run(rs *Result, child Task, ins []Input) {
 						"label": fmt.Sprintf("%#v", fmt.Sprintf("%v\ntime:%v", tk.Name(), et)),
 					})
 			}(tk)
-			run(rs, tk, tk.inputs)
+			fl.run(rs, tk, tk.inputs)
 		}
 	}
 	return
