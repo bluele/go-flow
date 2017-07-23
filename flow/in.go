@@ -9,6 +9,7 @@ type Input interface {
 	Channel() chan interface{}
 	Ready() chan struct{}
 	Read() (interface{}, error)
+	String() string
 }
 
 type EmptyInput struct{}
@@ -27,6 +28,10 @@ func (in *EmptyInput) Channel() chan interface{} {
 	ch := make(chan interface{})
 	close(ch)
 	return ch
+}
+
+func (in *EmptyInput) String() string {
+	return "empty"
 }
 
 // CombineInputs combines multiple inputs into single input
